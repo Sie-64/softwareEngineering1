@@ -1,0 +1,28 @@
+{
+  "name": "code-review-agent",
+  "version": "1.0.0",
+  "description": "基于 ReAct 循环与 OpenAI 兼容接口的代码审查 Agent（Code Agent 1 作业）",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "review:file": "node src/index.js --file examples/sampleBuggy.js"
+  },
+  "keywords": [
+    "agent",
+    "react",
+    "code-review",
+    "llm",
+    "openai"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "openai": "^4.67.3"
+  }
+}
