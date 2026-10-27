@@ -18,6 +18,8 @@ const ACTION_RE = /Action\s*[:：]\s*(\w+)/;
 const ACTION_INPUT_RE = /Action Input\s*[:：]\s*(\{[\s\S]*?\})/;
 /** 动作参数兜底正则（贪婪，用于参数值里含 } 的情况）。 */
 const ACTION_INPUT_GREEDY_RE = /Action Input\s*[:：]\s*(\{[\s\S]*\})/;
+/** 从模型输出中提取公开 Thought，供 Web 时间线展示。 */
+const THOUGHT_RE = /Thought\s*[:：]\s*([\s\S]*?)(?=\n(?:Action|Final Answer)\s*[:：]|$)/i;
 
 /** 模型没按格式输出时追加的纠正提示。 */
 const FORMAT_CORRECTION_HINT = `你的上一条输出格式不正确。请严格按以下两种格式之一重新输出，不要添加任何多余文字：
@@ -50,26 +52,52 @@ export class CodeReviewAgent {
    * 对一个用户输入（文件路径 / 代码片段 / 追问）执行完整的 ReAct 审查流程。
    *
    * @param {string} userInput - 用户输入。
+   * @param {{
+   *   onEvent?: (event: Record<string, any>) => void|Promise<void>
+   * }} [options] - 可选的运行事件回调，Web 层用它实时推送 Agent 状态。
    * @returns {Promise<string>} 最终审查报告，或失败/超步提示。
    */
-  async review(userInput) {
+  async review(userInput, { onEvent } = {}) {
+    const emit = async (event) => {
+      if (typeof onEvent !== "function") return;
+      try {
+        await onEvent(event);
+      } catch {
+        // 展示层或连接异常不应中断真正的审查流程。
+      }
+    };
+
+    await emit({ type: "start", inputLength: userInput.length });
     this.memory.add("user", userInput);
     this.memory.add("user", REACT_HINT);
 
     for (let step = 0; step < this.config.maxAgentSteps; step++) {
+      await emit({
+        type: "step",
+        step: step + 1,
+        maxSteps: this.config.maxAgentSteps,
+      });
+
       let llmOutput;
       try {
         llmOutput = await this.llm.chat(this.memory.get());
       } catch (err) {
-        return `LLM 调用失败，无法继续审查：${err.message}`;
+        const message = `LLM 调用失败，无法继续审查：${err.message}`;
+        await emit({ type: "error", message });
+        return message;
       }
 
       console.debug(`[agent] 第 ${step + 1} 步模型输出：\n${llmOutput}`);
       this.memory.add("assistant", llmOutput);
+      const thought = this._extractThought(llmOutput);
+      if (thought) {
+        await emit({ type: "thought", content: thought, step: step + 1 });
+      }
 
       // 终止条件 1：拿到最终报告
       const finalAnswer = this._extractFinalAnswer(llmOutput);
       if (finalAnswer) {
+        await emit({ type: "report", content: finalAnswer, step: step + 1 });
         return finalAnswer;
       }
 
@@ -78,18 +106,87 @@ export class CodeReviewAgent {
       if (!parsed || !parsed.args) {
         // 既没有 Final Answer，也没能解析出可用 Action → 追加纠正提示后重试
         console.warn("[agent] 模型输出不符合 ReAct 格式，已追加纠正提示并要求重试。");
+        await emit({
+          type: "warning",
+          message: "模型输出格式偏离协议，已要求其自动纠正。",
+          step: step + 1,
+        });
         this.memory.add("user", FORMAT_CORRECTION_HINT);
         continue;
       }
 
       // 执行工具，并把结果作为 Observation 回灌
+      await emit({
+        type: "action",
+        action: parsed.action,
+        argsPreview: this._formatArgs(parsed.args),
+        step: step + 1,
+      });
       const observation = await callTool(parsed.action, parsed.args);
       console.debug(`[agent] 工具 ${parsed.action} 返回：\n${observation}`);
+      await emit({
+        type: "observation",
+        action: parsed.action,
+        result: this._truncateForEvent(observation),
+        ok: !observation.startsWith("ERROR:"),
+        step: step + 1,
+      });
       this.memory.add("user", `Observation: ${observation}`);
     }
 
     // 终止条件 2：步数耗尽
-    return "已达到最大推理步数，未能生成最终审查报告。请尝试缩小审查范围或提高 AGENT_MAX_STEPS。";
+    const message =
+      "已达到最大推理步数，未能生成最终审查报告。请尝试缩小审查范围或提高 AGENT_MAX_STEPS。";
+    await emit({ type: "error", message, code: "MAX_STEPS_REACHED" });
+    return message;
+  }
+
+  /**
+   * 从 ReAct 输出中提取 Thought 内容。
+   *
+   * @private
+   * @param {string} text - 模型原始输出。
+   * @returns {string|null} Thought 正文。
+   */
+  _extractThought(text) {
+    const match = text.match(THOUGHT_RE);
+    const thought = match?.[1]?.trim();
+    return thought || null;
+  }
+
+  /**
+   * 为前端生成精简的工具参数预览，避免把大段源码重复塞进事件流。
+   *
+   * @private
+   * @param {Record<string, any>} args - 工具参数。
+   * @returns {string} 便于展示的参数摘要。
+   */
+  _formatArgs(args) {
+    const preview = {};
+    for (const [key, value] of Object.entries(args ?? {})) {
+      if (typeof value === "string" && value.length > 240) {
+        preview[key] = `${value.slice(0, 240)}…（共 ${value.length} 字符）`;
+      } else {
+        preview[key] = value;
+      }
+    }
+    try {
+      return JSON.stringify(preview, null, 2);
+    } catch {
+      return String(preview);
+    }
+  }
+
+  /**
+   * 截断发送给浏览器的 Observation，完整内容仍保留在 Agent 记忆中。
+   *
+   * @private
+   * @param {string} text - 工具结果。
+   * @returns {string} 展示用结果。
+   */
+  _truncateForEvent(text) {
+    const value = String(text ?? "");
+    return value.length > 12_000 ? `${value.slice(0, 12_000)}\n…（结果已截断）` : value;
   }
 
   /**

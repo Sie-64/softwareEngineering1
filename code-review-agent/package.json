@@ -9,6 +9,8 @@
   },
   "scripts": {
     "start": "node src/index.js",
+    "web": "node web/server.js",
+    "test": "node --test",
     "review:file": "node src/index.js --file examples/sampleBuggy.js"
   },
   "keywords": [

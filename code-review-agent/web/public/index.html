@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Code Review Agent - 可视化的 AI 代码审查工作台"
+    />
+    <title>Code Review Agent · AI Code Intelligence</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <canvas id="ambientCanvas" aria-hidden="true"></canvas>
+    <div class="aurora aurora--blue" aria-hidden="true"></div>
+    <div class="aurora aurora--pink" aria-hidden="true"></div>
+    <div id="cursorGlow" aria-hidden="true"></div>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Code Review Agent 首页">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 44 44" role="img">
+              <path d="M22 3 39 12.5v19L22 41 5 31.5v-19L22 3Z" />
+              <path d="m16 17-6 5 6 5M28 17l6 5-6 5M25 13l-6 18" />
+            </svg>
+          </span>
+          <span class="brand-copy">
+            <strong>CODE REVIEW</strong>
+            <span>INTELLIGENCE LAB</span>
+          </span>
+        </a>
+
+        <div class="system-status" aria-label="系统状态">
+          <span class="status-orbit"><i></i></span>
+          <span>AGENT ONLINE</span>
+          <span class="system-divider"></span>
+          <span id="modelLabel">DEEPSEEK · READY</span>
+        </div>
+
+        <button class="ghost-button" id="newAnalysisBtn" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          NEW ANALYSIS
+        </button>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div class="hero-copy">
+            <div class="eyebrow">
+              <span class="eyebrow-line"></span>
+              SEMANTIC CODE SCANNER / V1.0
+            </div>
+            <h1>
+              See beyond
+              <span class="gradient-text">the syntax.</span>
+            </h1>
+            <p>
+              多轮推理、运行验证与风险定位，在代码进入生产环境前，揭示那些肉眼容易错过的细节。
+            </p>
+          </div>
+
+          <div class="hero-metrics" aria-label="Agent 能力">
+            <div class="metric">
+              <span class="metric-index">01</span>
+              <strong>ReAct</strong>
+              <span>可解释推理</span>
+            </div>
+            <div class="metric">
+              <span class="metric-index">02</span>
+              <strong>Live trace</strong>
+              <span>实时链路</span>
+            </div>
+            <div class="metric">
+              <span class="metric-index">03</span>
+              <strong>Sandbox</strong>
+              <span>行为验证</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="workspace" aria-label="代码审查工作区">
+          <article class="panel source-panel">
+            <header class="panel-header">
+              <div>
+                <div class="panel-kicker">
+                  <span>01</span>
+                  SOURCE INPUT
+                </div>
+                <h2>提交代码样本</h2>
+              </div>
+              <div class="source-actions">
+                <button class="icon-text-button" id="uploadBtn" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v5h14v-5" />
+                  </svg>
+                  上传文件
+                </button>
+                <button class="icon-text-button" id="exampleBtn" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m8 5-5 7 5 7M16 5l5 7-5 7M14 4l-4 16" />
+                  </svg>
+                  示例代码
+                </button>
+              </div>
+            </header>
+
+            <div class="editor-frame" id="dropZone">
+              <div class="editor-chrome">
+                <div class="window-dots" aria-hidden="true">
+                  <i></i><i></i><i></i>
+                </div>
+                <div class="file-identity">
+                  <span class="file-signal"></span>
+                  <span id="filenameLabel">untitled.js</span>
+                  <span class="unsaved-dot" id="unsavedDot" aria-hidden="true"></span>
+                </div>
+                <div class="editor-readout">
+                  <span id="languageLabel">JavaScript</span>
+                  <span class="readout-separator"></span>
+                  <span id="lineCountLabel">0 LOC</span>
+                </div>
+              </div>
+
+              <div class="code-stage">
+                <div class="line-numbers" id="lineNumbers" aria-hidden="true">1</div>
+                <textarea
+                  id="codeInput"
+                  class="code-input"
+                  spellcheck="false"
+                  autocomplete="off"
+                  autocapitalize="off"
+                  aria-label="待审查代码"
+                  placeholder="// 在这里粘贴待审查的代码
+// 或拖拽源码文件到编辑器
+
+function calculateTotal(items) {
+  return items.reduce((sum, item) => sum + item.price, 0);
+}"
+                ></textarea>
+              </div>
+
+              <div class="drop-overlay" aria-hidden="true">
+                <span class="drop-icon">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v5h14v-5" />
+                  </svg>
+                </span>
+                <strong>释放文件，导入分析队列</strong>
+                <span>支持任意文本源码 · 最大 200 KB</span>
+              </div>
+            </div>
+
+            <footer class="source-footer">
+              <div class="input-stats">
+                <span class="pulse-dot"></span>
+                <span><strong id="charCount">0</strong> chars</span>
+                <span class="stat-divider"></span>
+                <span><strong id="estimatedTokens">0</strong> est. tokens</span>
+              </div>
+              <button class="analyze-button" id="analyzeBtn" type="button" disabled>
+                <span class="button-glow" aria-hidden="true"></span>
+                <span class="button-label">
+                  <span>启动智能审查</span>
+                  <small>INITIALIZE REVIEW</small>
+                </span>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 12h14m-5-5 5 5-5 5" />
+                </svg>
+              </button>
+            </footer>
+          </article>
+
+          <aside class="panel telemetry-panel" aria-label="Agent 运行轨迹">
+            <header class="panel-header telemetry-header">
+              <div>
+                <div class="panel-kicker">
+                  <span>02</span>
+                  AGENT TELEMETRY
+                </div>
+                <h2>推理链路</h2>
+              </div>
+              <span class="live-badge" id="liveBadge">
+                <i></i>
+                <span>STANDBY</span>
+              </span>
+            </header>
+
+            <div class="telemetry-idle" id="telemetryIdle">
+              <div class="radar" aria-hidden="true">
+                <span class="radar-ring radar-ring--outer"></span>
+                <span class="radar-ring radar-ring--inner"></span>
+                <span class="radar-axis radar-axis--x"></span>
+                <span class="radar-axis radar-axis--y"></span>
+                <span class="radar-sweep"></span>
+                <span class="radar-core">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M8 6 3 12l5 6M16 6l5 6-5 6M14 4l-4 16" />
+                  </svg>
+                </span>
+              </div>
+              <div class="idle-copy">
+                <span class="signal-label">AWAITING SOURCE STREAM</span>
+                <p>提交代码后，这里将实时呈现 Agent 的推理、工具调用与观察结果。</p>
+              </div>
+              <div class="protocol-list">
+                <div><span>01</span> THINK</div>
+                <div><span>02</span> READ</div>
+                <div><span>03</span> VERIFY</div>
+                <div><span>04</span> REPORT</div>
+              </div>
+            </div>
+
+            <div class="trace-view" id="traceView" hidden>
+              <div class="trace-status">
+                <div>
+                  <span class="trace-label">CURRENT OPERATION</span>
+                  <strong id="currentOperation">INITIALIZING</strong>
+                </div>
+                <div class="trace-counter">
+                  <span id="stepCounter">00 / 00</span>
+                  <small>REASONING STEP</small>
+                </div>
+              </div>
+              <div class="trace-progress">
+                <span id="traceProgressBar"></span>
+              </div>
+              <div class="timeline" id="timeline" aria-live="polite"></div>
+              <div class="trace-waiting" id="traceWaiting" hidden>
+                <span></span><span></span><span></span>
+                <small>AGENT IS PROCESSING</small>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <section class="report-panel panel" id="reportPanel" hidden>
+          <header class="report-header">
+            <div class="report-heading">
+              <div class="report-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M6 3h9l4 4v14H6V3Z" />
+                  <path d="M15 3v5h5M9 12h7M9 16h7" />
+                </svg>
+              </div>
+              <div>
+                <div class="panel-kicker">
+                  <span>03</span>
+                  REVIEW INTELLIGENCE
+                </div>
+                <h2>审查报告</h2>
+              </div>
+            </div>
+            <div class="report-actions">
+              <span class="report-time" id="reportTime">—</span>
+              <button class="icon-only-button" id="copyReportBtn" type="button" title="复制报告">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="8" y="8" width="11" height="12" rx="2" />
+                  <path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h3" />
+                </svg>
+              </button>
+            </div>
+          </header>
+
+          <div class="risk-strip">
+            <div class="risk-chip risk-chip--high">
+              <span>HIGH RISK</span>
+              <strong id="highRiskCount">0</strong>
+            </div>
+            <div class="risk-chip risk-chip--medium">
+              <span>MEDIUM</span>
+              <strong id="mediumRiskCount">0</strong>
+            </div>
+            <div class="risk-chip risk-chip--low">
+              <span>LOW / INFO</span>
+              <strong id="lowRiskCount">0</strong>
+            </div>
+            <div class="scan-summary">
+              <span class="scan-check">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m5 12 4 4L19 6" />
+                </svg>
+              </span>
+              <span>扫描完成</span>
+              <small id="reportMeta">REACT TRACE VERIFIED</small>
+            </div>
+          </div>
+
+          <article class="markdown-body" id="reportContent"></article>
+
+          <form class="followup-form" id="followupForm">
+            <span class="followup-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5h16v11H9l-5 4V5Z" />
+                <path d="M8 9h8M8 12h5" />
+              </svg>
+            </span>
+            <input
+              id="followupInput"
+              type="text"
+              maxlength="4000"
+              autocomplete="off"
+              placeholder="继续追问，例如：第 1 个问题在什么场景下会触发？"
+              aria-label="继续追问"
+            />
+            <button id="followupBtn" type="submit">
+              发送追问
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m5 12 14-7-4 14-3-6-7-1Z" />
+              </svg>
+            </button>
+          </form>
+        </section>
+      </main>
+
+      <footer class="page-footer">
+        <span>CODE REVIEW AGENT / REACT PROTOCOL</span>
+        <span class="footer-coordinate">31.2304° N · 121.4737° E</span>
+        <span>ALL ANALYSIS RUNS LOCALLY</span>
+      </footer>
+    </div>
+
+    <input
+      id="fileInput"
+      type="file"
+      hidden
+      accept=".js,.mjs,.cjs,.ts,.tsx,.jsx,.py,.java,.c,.cc,.cpp,.h,.hpp,.go,.rs,.rb,.php,.cs,.swift,.kt,.sql,.json,.yaml,.yml,.html,.css,.md,.txt"
+    />
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
